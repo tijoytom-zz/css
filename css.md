@@ -39,7 +39,7 @@ PUT https://localhost:19080/Resources/Secrets/connstring/values/v1?api-version=6
 ```
 
 ## View the value
-GET https://localhost:19080/Resources/Secrets/connstring/values/v1/list_value?api-version=6.4-preview
+POST https://localhost:19080/Resources/Secrets/connstring/values/v1/list_value?api-version=6.4-preview
 
 ## Use the secret in your application.
 ### settings.xml
