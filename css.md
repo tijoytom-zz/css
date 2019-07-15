@@ -1,5 +1,92 @@
 
-# Enable Secret Store for local cluster.
+# 1) Enable Central Secret Store Service Fabric Azure Cluster.
+## Upgrade/deploy the cluster with this added to cluster manifest.
+
+```json
+               "fabricSettings": [
+                    ...
+                    {
+                        "parameters": [
+                            {
+                                "name": "IsEnabled",
+                                "value": "true"
+                              },
+                              {
+                                "name": "MinReplicaSetSize",
+                                "value": "1"
+                              },
+                              {
+                                "name": "TargetReplicaSetSize",
+                                "value": "1"
+                              },
+                              {
+                                  "name" : "EncryptionCertificateThumbprint",
+                                  "value": "9d9f39a1e563a537991fab9d2f557f8e04495598"
+                              },
+                        ],
+                        "name": "CentralSecretService"
+                    }
+```
+## Make sure to provision the encryption certificate to VMs while depoying the cluster.
+```json
+                    "osProfile": {
+                        ....
+                        "secrets": [
+                            {
+                                "sourceVault": {
+                                    "id": "keyVault"
+                                },
+                                "vaultCertificates": [
+                                   ...
+                                    {
+                                        "certificateStore": "My",
+                                        "certificateUrl": "EncryptionCertificateURL"
+                                    },
+                                ]
+                            }
+                        ]
+                    },
+```
+## Make sure 'NetworkService' has read permission to encryption certificate private key.
+  Once you login in to the VM run `certutil -v  -store My <EncryptionCertificateThumbprint>` and see of NetworkService has read permission. If not, you can use the below script to 
+  grant permission. 
+  ```powershell
+function Add-CertAcl($cert) {
+        $rsaFile = $cert.PrivateKey.CspKeyContainerInfo.UniqueKeyContainerName
+        $keyPath = "C:\ProgramData\Microsoft\Crypto\RSA\MachineKeys\"
+        $fullPath=$keyPath+$rsaFile
+        $oldAcl = get-acl $fullPath
+        $grantee_name = 'networkservice'
+        $grantee = New-Object System.Security.Principal.NTAccount($grantee_name)
+        $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($grantee, 'Read', 'None', 'None', 'Allow')
+        $oldAcl.AddAccessRule($accessRule)
+        $newAcl = Set-Acl $fullPath $oldAcl
+        get-acl $fullPath
+}
+$cert = Get-ChildItem 'cert:\LocalMachine\My\9d9f39a1e563a537991fab9d2f557f8e04495598'
+Add-CertAcl($cert)
+```
+Once CSS(Central Secret Store) is enabled you can follow the instructions for local cluster below to set and read secret values.
+
+## Declare secret resources in ARM template.
+  You can declare secret resource in your ARM template and later use the REST API to set values for the secret resource. 
+```json 
+"resources": [
+    {
+      "apiVersion": "2018-07-01-preview",
+      "name": "supersecret",
+      "type": "Microsoft.ServiceFabricMesh/secrets",
+      "location": "[parameters('location')]", 
+      "dependsOn": [],
+      "properties": {
+        "kind": "inlinedValue",
+        "description": "Application Secret",
+        "contentType": "text/plain",
+      }
+    }
+  ]
+  ```
+# 2) Enable Secret Store for local cluster.
 Note : Inorder to use secret store the cluster need to be a secure cluster.
 ## Upgrade/deploy the cluster with this added to cluster manifest.
 ```xml
@@ -68,4 +155,15 @@ POST https://localhost:19080/Resources/Secrets/connstring/values/v1/list_value?a
 ```go
 cstr, err := ioutil.ReadFile(path.Join(os.Getenv("SecretPath"),  "TopSecret"))
 ```
+### Using a secret in <ContainerHostPolicies> for accessing container repository
 
+```xml
+<ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="containertestPkg" ServiceManifestVersion="1.0.0" />
+    <ConfigOverrides />
+    <Policies>
+      <ContainerHostPolicies CodePackageRef="Code">
+        <RepositoryCredentials AccountName="tijoytom" Type="SecretsStoreRef" Password="connstring:v1"/>
+       ...
+  </ServiceManifestImport>
+```
