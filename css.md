@@ -105,9 +105,9 @@ Note : Inorder to use secret store the cluster need to be a secure cluster.
 ``` 
 After deploy you should see `fabric:/System/CentralSecretService` is listed under `System` services in fabric explorer.  
 
-*From here on we will use **`connstring`** as our secret resource name and **`v1`** as it's version.*
 ## Create a secret resource.
-PUT https://localhost:19080/Resources/Secrets/connstring?api-version=6.4-preview
+*From here on we will use **`PASSWORD`** as our secret resource name and **`v1`** as it's version.*
+PUT https://localhost:19080/Resources/Secrets/PASSWORD?api-version=6.4-preview
 ```json
     {  
    "properties":{  
@@ -120,13 +120,13 @@ PUT https://localhost:19080/Resources/Secrets/connstring?api-version=6.4-preview
 ```
 
 ## Set value for your secret
-PUT https://localhost:19080/Resources/Secrets/connstring/values/v1?api-version=6.4-preview
+PUT https://localhost:19080/Resources/Secrets/PASSWORD/values/v1?api-version=6.4-preview
 ```json
-{"properties": {"value": "conn=bla;password=bla"}}
+{"properties": {"value": "mysecretpassword"}}
 ```
 
 ## View the value
-POST https://localhost:19080/Resources/Secrets/connstring/values/v1/list_value?api-version=6.4-preview
+POST https://localhost:19080/Resources/Secrets/PASSWORD/values/v1/list_value?api-version=6.4-preview
 
 ## Use the secret in your application.
 ### settings.xml
@@ -134,7 +134,7 @@ POST https://localhost:19080/Resources/Secrets/connstring/values/v1/list_value?a
 <?xml version="1.0" encoding="utf-8" ?>
 <Settings xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/2011/01/fabric">
   <Section Name="testsecrets">
-  <Parameter Name="TopSecret" Type="SecretsStoreRef" Value="connstring:v1"/
+  <Parameter Name="TopSecret" Type="SecretsStoreRef" Value="PASSWORD:v1"/
   </Section>
 </Settings>
 ```
@@ -155,6 +155,22 @@ POST https://localhost:19080/Resources/Secrets/connstring/values/v1/list_value?a
 ```go
 cstr, err := ioutil.ReadFile(path.Join(os.Getenv("SecretPath"),  "TopSecret"))
 ```
+
+### Mounting the secrets to containers.
+
+```xml
+<ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="testservicePkg" ServiceManifestVersion="1.0.0" />
+    <ConfigOverrides />
+    <Policies>
+      <ConfigPackagePolicies CodePackageRef="Code">
+        <ConfigPackage Name="Config" SectionName="testsecrets" MountPoint = "C:\myapp\secrets" />
+      </ConfigPackagePolicies>
+    </Policies>
+  </ServiceManifestImport>
+```
+C:\myapp\secrets folder inside the container will have files with <Parameter> names. in this case `C:\myapp\secrets\TopSecret`
+
 ### Using a secret in <ContainerHostPolicies> for accessing container repository
 
 ```xml
@@ -163,7 +179,27 @@ cstr, err := ioutil.ReadFile(path.Join(os.Getenv("SecretPath"),  "TopSecret"))
     <ConfigOverrides />
     <Policies>
       <ContainerHostPolicies CodePackageRef="Code">
-        <RepositoryCredentials AccountName="tijoytom" Type="SecretsStoreRef" Password="connstring:v1"/>
+        <RepositoryCredentials AccountName="tijoytom" Type="SecretsStoreRef" Password="PASSWORD:v1"/>
        ...
   </ServiceManifestImport>
 ```
+
+# 3) Using Service Fabric CLI to manage secrets.
+  ### Install [sfctl](https://github.com/microsoft) service-fabric-cli.
+
+  ### 3.1) Managing secret resources. 
+    `sfctl mesh secret [show, delete, list]
+  ### 3.2) Managing secret resource value.
+    `sfctl mesh secretvalue [delete, list, show] 
+  ### Examples:
+  Show value for a secret: `sfctl mesh secretvalue show -n PASSWORD -v v1`
+  List all secrets :`sfctl mesh secret list` 
+
+# FAQ 
+  1. Secrets are a cluster level resource and are shared among all the application in the cluster. 
+  
+  2. Secrets are versioned, ie secret PASSWORD can have multiple versioned values, for example PASSWORD:v1 = "abc", PASSWORD:v2 = "vfg" , where PASSWORD is the secret name and v1 and v2 are versions.
+  
+  3. `sfctl` do not support creating a secret, secrets are created declaratively using the ARM template or using the REST api.
+  
+  4. 
