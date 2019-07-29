@@ -24,10 +24,14 @@ Before talking about keyvault support let's look at how mesh secret store is use
 Couple of points to note.
 * Secrets are resources and they are versioned just like any other resources. 
 * Secrets are cluster level resources and any application running in the cluster have access to it.
-* Secrets are encrypted using secret encryption certificate specified in cluster manifest, if no encryption certificate is specified we fallback to cluster certificate.
+* Secrets are encrypted using secret encryption certificate specified in cluster manifest, if no encryption certificate 
+  is specified we fallback to cluster certificate.
 
 ## 2. Keyvault support 
-The goal is to extend secret store to support keyvault references. Importantly we need to scope keyvault references to applciationtype/service in a (multi-tenant) cluster. Current secret store secrets are cluster level resources and there has been discussion about removing secerts as a resource, but this means undoing/redoing secret store, so in order to limit the scope we will treat secret store as a blackbox. 
+The goal is to extend secret store to support keyvault references. Importantly we need to scope keyvault references to 
+applciationtype/service in a (multi-tenant) cluster. Current secret store secrets are cluster level resources and there 
+has been discussion about removing secerts as a resource, but this means undoing/redoing secret store, so in order to 
+limit the scope we will treat secret store as a blackbox. 
 
 Let's start with how an Atlas application will use keyvault reference.
 
@@ -35,7 +39,8 @@ Add this to settings.xml and hosting will automatically resolve `TopSecret2` key
 ```xml
 <Parameter Name="TopSecret2" Type="KeyVaultRef" Value="https://ttkvault.vault.azure.net/secrets/supersecret/8f642b17bf95453a9fa611925a9c3c89"/>
 ```
-As you might have noticed, the user no longer has to create a secret resource neither do they have to setup value using another commandline tool. `KeyVaultRef` is the new type that hosting will understand and `Value` is a valid KeyVaultURL.
+As you might have noticed, the user no longer has to create a secret resource neither do they have to setup value using 
+another commandline tool. `KeyVaultRef` is the new type that hosting will understand and `Value` is a valid KeyVaultURL.
 
 ## 3. Under the Hood
 ### Prerequisites for using keyvault references.
@@ -49,7 +54,8 @@ As you might have noticed, the user no longer has to create a secret resource ne
     * CSS resolves the known secrets values, but set the metadata for unknown ones as 'NOTFOUND'.
     * Hosting gets the results back and takes one of these action
         * All secerts resolved, continue with activation.
-        * One of the secret with Type='SecretStoreRef' is 'NOTFOUND', fails activation.[These are secretstore resources and they need be created upfront]
+        * One of the secret with Type='SecretStoreRef' is 'NOTFOUND', fails activation.[These are secretstore resources 
+          and they need be created upfront]
         * One of the secret with Type='KeyVaultRef' is 'NOTFOUND', proceed to resolve them.
 
     * Hosting keyvault secret resolution 
@@ -71,33 +77,45 @@ As you might have noticed, the user no longer has to create a secret resource ne
     * Code changes are not exhaustive and works well with existing secret store implemenation.
 
 ### Disadvantages
-    * This is not bullet proof, any one how know applicationtype and servicename can compute the secret key. To an extend mitigated by filtering our all KeyVault secret type from public API.
+    * This is not bullet proof, any one how know applicationtype and servicename can compute the secret key. To an 
+      extend mitigated by filtering our all KeyVault secret type from public API.
     * Hosting need to know about keyvault references, it already know about SecretStore so not a big deal.
-    * Remote possibility that two totally different cluster might have the same applicationtype/service/keyvaulurl/    parametername. Consider adding something that identify the subscription to the hash?
+    * Remote possibility that two totally different cluster might have the same applicationtype/service/keyvaulurl/parametername. 
+      Consider adding something that identify the subscription to the hash?
 
 # FAQ
     1. Why don't we make secret store aware of keyvault and ask it to resolve the references? 
-    Secret Store is a generic replicated keyvault store which keeps it values encrypted. Keeping it generic means we can cache any kind of secrets and it's oblivious to the kind of secret it's storing.
+    Secret Store is a generic replicated keyvault store which keeps it values encrypted. Keeping it generic means we can 
+    cache any kind of secrets and it's oblivious to the kind of secret it's storing.
     
     2. Why is hosting resolving keyvault references?
-    Apart from the reasoning to keep secret store generic, any application requiring a keyvault reference need them at application startup and it's better we resolve them in hosting since the application can't start without them anyways. Moreover hosting has all information that it need about the service where as CSS do not have it.
+    Apart from the reasoning to keep secret store generic, any application requiring a keyvault reference need them at 
+    application startup and it's better we resolve them in hosting since the application can't start without them anyways. 
+    Moreover hosting has all information that it need about the service where as CSS do not have it.
 
     3. How do i refresh/version the keyvault secret?
-    Keyvault create different URL for different versions of the same secret, so once the applciation developer change the URL in settings.xml, the key that we generate will be different(hopefully no SHA256 collision) and hosting will automatically retrive the new secret from keyvault.
+    Keyvault create different URL for different versions of the same secret, so once the applciation developer change 
+    the URL in settings.xml, the key that we generate will be different(hopefully no SHA256 collision) and hosting will 
+    automatically retrive the new secret from keyvault.
 
     4.Atlas specific changes?
-    I dont see any changes specific to Atlas other than the new Parameter Type=`KeyVaultRef`. I might be missing something here.
+    I dont see any changes specific to Atlas other than the new Parameter Type=`KeyVaultRef`. I might be missing 
+    something here.
     
     5. How do we handle burst traffic for keyvault ie 100s of containers spinning up at the same time?
-    This is mitigated in two ways, make sure not to make multiple request to keyvault for the same URL and also check CSS if the value is already retrived by another node before making a request. 
+    This is mitigated in two ways, make sure not to make multiple request to keyvault for the same URL and also check CSS 
+    if the value is already retrived by another node before making a request. 
     
     6. Do we need new internal API for secret store?
-        The current design do not require any new API other than slight modification to behaviour of existing API. But we might need new API in future if was want to lock down secret store to admins only.(dragos mentioned this)
+    The current design do not require any new API other than slight modification to behaviour of existing API. But we 
+    might need new API in future if was want to lock down secret store to admins only.(dragos mentioned this)
     
     7. What about mounting to container, binding to envirnoment variable etc?
-        All this work exactly as it is today for secret store, that's another advantage of treating secret store as a blackbox.
+    All this work exactly as it is today for secret store, that's another advantage of treating secret store as a blackbox.
+    
     8. What about provisioning secrets in keyvault and granting permission etc?
-        The only thing that we care about is the application identity have read access to the keyvault secret, how the admin set it up is up to them and totally outside the scope of SF cluster.
+    The only thing that we care about is the application identity have read access to the keyvault secret, how the 
+    admin set it up is up to them and totally outside the scope of SF cluster.
 
 
 
